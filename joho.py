@@ -50,3 +50,5 @@ if "date" in st.session_state:
         st.success("保存しました！")
         st.session_state.pop("date")
         st.experimental_rerun()
+
+print("hello")
