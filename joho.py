@@ -14,16 +14,6 @@ DATA_FILE = "events.json"
 JST = pytz.timezone("Asia/Tokyo")  # 東京タイムゾーン
 
 # -------------------------
-# rerunフラグの初期化
-# -------------------------
-if "needs_rerun" not in st.session_state:
-    st.session_state["needs_rerun"] = False
-
-if st.session_state["needs_rerun"]:
-    st.session_state["needs_rerun"] = False
-    st.experimental_rerun()
-
-# -------------------------
 # ヘルパ：読み込み & id付与
 # -------------------------
 def load_events_with_ids():
@@ -168,7 +158,7 @@ with col2:
             if deleted:
                 save_events(events)
                 st.session_state.clear()
-                st.session_state["needs_rerun"] = True
+                st.experimental_rerun()
             else:
                 st.warning("一致する予定が見つかりませんでした（タイトル＋日付）。")
     else:
@@ -208,7 +198,7 @@ if clicked_date:
         events.append(new_event)
         save_events(events)
         st.success("保存しました！")
-        st.session_state["needs_rerun"] = True
+        st.experimental_rerun()
 
 # -------------------------
 # 全削除
@@ -218,4 +208,4 @@ if delete_all_pressed:
     if os.path.exists(DATA_FILE):
         os.remove(DATA_FILE)
     st.success("全削除しました。")
-    st.session_state["needs_rerun"] = True
+    st.experimental_rerun()
