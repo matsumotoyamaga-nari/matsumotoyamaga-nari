@@ -80,26 +80,6 @@ def extract_clicked_info(clicked_raw):
 events = load_events_with_ids()
 
 # -------------------------
-# レイアウト
-# -------------------------
-col1, col2 = st.columns([3, 1])
-
-# -------------------------
-# 右パネル：年・月選択
-# -------------------------
-with col2:
-    st.subheader("🗓 年月選択")
-
-    today = datetime.date.today()
-    year_list = list(range(2020, 2031))
-    year_index = year_list.index(today.year)
-    year = st.selectbox("年", year_list, index=year_index)
-
-    month_list = list(range(1, 13))
-    month_index = month_list.index(today.month)
-    month = st.selectbox("月", month_list, index=month_index)
-
-# -------------------------
 # カレンダー設定
 # -------------------------
 calendar_options = {
@@ -107,13 +87,17 @@ calendar_options = {
     "editable": True,
     "selectable": True,
     "locale": "ja",
-    "initialDate": f"{year}-{month:02d}-01",  # 選択年月で初期表示
     "headerToolbar": {
         "left": "prev,next today",
         "center": "title",
         "right": "dayGridMonth,timeGridWeek",
     },
 }
+
+# -------------------------
+# レイアウト
+# -------------------------
+col1, col2 = st.columns([3, 1])
 
 # -------------------------
 # カレンダー表示
@@ -152,7 +136,6 @@ selected_start = st.session_state.get("selected_start", None)
 # -------------------------
 with col2:
     st.subheader("📝 選択中の予定")
-
     if selected_title:
         st.markdown(f"**タイトル：** {selected_title}")
         st.markdown(f"**日付：** {selected_start or '（未取得）'}")
@@ -208,7 +191,6 @@ if clicked_date:
     with st.form("add_event"):
         title = st.text_input("予定を入力してください")
         submitted = st.form_submit_button("保存")
-
         if submitted and title:
             new_event = {
                 "id": str(uuid.uuid4()),
@@ -229,3 +211,4 @@ if st.button("🗑 予定をすべて削除"):
         os.remove(DATA_FILE)
     st.success("全削除しました。")
     st.experimental_rerun()
+
