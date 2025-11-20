@@ -5,11 +5,14 @@ import json
 import os
 import uuid
 from datetime import datetime as dt
+import pytz  # 追加
 
 st.set_page_config(page_title="クリックで予定入力カレンダー", layout="wide")
-st.title("📅 クリックで予定を追加できるカレンダー")
+st.title("📅 サッカー部予定カレンダー")
 
 DATA_FILE = "events.json"
+
+JST = pytz.timezone("Asia/Tokyo")  # タイムゾーン設定
 
 # -------------------------
 # ヘルパ：読み込み & id付与
@@ -45,7 +48,7 @@ def save_events(events):
         json.dump(events, f, ensure_ascii=False, indent=2)
 
 # -------------------------
-# ヘルパ：クリック情報取得
+# ヘルパ：クリック情報取得（JSTに変換）
 # -------------------------
 def extract_clicked_info(clicked_raw):
     if not clicked_raw:
@@ -62,14 +65,14 @@ def extract_clicked_info(clicked_raw):
 
     raw_start = ev.get("start") or ev.get("startStr") or ev.get("date") or ev.get("dateStr")
     if raw_start:
-        s = str(raw_start)
-        if "T" in s:
-            s = s.split("T")[0]
-        else:
-            try:
-                s = dt.fromisoformat(s).date().isoformat()
-            except Exception:
-                s = s[:10]
+        try:
+            # ISO形式でdatetimeに変換
+            dt_obj = dt.fromisoformat(str(raw_start))
+            # UTC→JST変換
+            dt_obj = dt_obj.astimezone(JST)
+            s = dt_obj.strftime("%Y-%m-%d %H:%M")
+        except Exception:
+            s = str(raw_start)[:16]  # 最初の16文字（YYYY-MM-DD HH:MM）
         info["start"] = s
 
     return info
@@ -150,15 +153,7 @@ with col2:
                 for idx, e in enumerate(events):
                     ev_title = e.get("title", "")
                     ev_start = e.get("start", "")
-                    s = str(ev_start)
-                    if "T" in s:
-                        s = s.split("T")[0]
-                    else:
-                        try:
-                            s = dt.fromisoformat(s).date().isoformat()
-                        except Exception:
-                            s = s[:10]
-                    if ev_title == selected_title and s == selected_start:
+                    if ev_title == selected_title and ev_start == selected_start:
                         candidates.append(idx)
 
                 if len(candidates) == 1:
@@ -175,7 +170,7 @@ with col2:
         st.info("カレンダー上の予定をクリックするとここに表示されます。")
 
 # -------------------------
-# 日付クリックで追加（時間入力なし）
+# 日付クリックで追加（JSTに変換）
 # -------------------------
 clicked_date = None
 if state and "dateClick" in state and state["dateClick"]:
@@ -186,8 +181,12 @@ elif state and "select" in state and state["select"]:
     clicked_date = sel.get("start") or sel.get("startStr")
 
 if clicked_date:
-    cd = str(clicked_date)
-    normalized_clicked = cd.split("T")[0]
+    try:
+        dt_obj = dt.fromisoformat(str(clicked_date))
+        dt_obj = dt_obj.astimezone(JST)
+        normalized_clicked = dt_obj.strftime("%Y-%m-%d %H:%M")
+    except Exception:
+        normalized_clicked = str(clicked_date)[:16]
 
     st.info(f"🗓 {normalized_clicked} の予定を追加します。")
     with st.form("add_event"):
@@ -203,7 +202,6 @@ if clicked_date:
             events.append(new_event)
             save_events(events)
             st.success("保存しました！")
-            # rerun をフォームの外で安全に呼ぶ
             st.experimental_rerun()
 
 # -------------------------
