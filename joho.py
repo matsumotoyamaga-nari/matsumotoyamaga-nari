@@ -158,6 +158,7 @@ with col2:
             if deleted:
                 save_events(events)
                 st.session_state.clear()
+                # ボタン押下直後だけ rerun
                 st.experimental_rerun()
             else:
                 st.warning("一致する予定が見つかりませんでした（タイトル＋日付）。")
@@ -198,7 +199,7 @@ if clicked_date:
         events.append(new_event)
         save_events(events)
         st.success("保存しました！")
-        st.experimental_rerun()
+        st.experimental_rerun()  # ここでのみ呼ぶ
 
 # -------------------------
 # 全削除
@@ -208,4 +209,4 @@ if delete_all_pressed:
     if os.path.exists(DATA_FILE):
         os.remove(DATA_FILE)
     st.success("全削除しました。")
-    st.experimental_rerun()
+    st.experimental_rerun()  # ここでのみ呼ぶ
