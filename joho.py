@@ -141,11 +141,10 @@ with col2:
         st.markdown(f"**日付：** {selected_start or '（未取得）'}")
 
         if st.button("❌ この予定を削除する"):
+            deleted = False
             if selected_id:
-                new_events = [e for e in events if e.get("id") != selected_id]
-                save_events(new_events)
-                st.session_state.clear()
-                st.experimental_rerun()
+                events = [e for e in events if e.get("id") != selected_id]
+                deleted = True
             else:
                 candidates = []
                 for idx, e in enumerate(events):
@@ -164,11 +163,14 @@ with col2:
 
                 if len(candidates) == 1:
                     del events[candidates[0]]
-                    save_events(events)
-                    st.session_state.clear()
-                    st.experimental_rerun()
-                else:
-                    st.warning("一致する予定が見つかりませんでした（タイトル＋日付）。")
+                    deleted = True
+
+            if deleted:
+                save_events(events)
+                st.session_state.clear()
+                st.experimental_rerun()
+            else:
+                st.warning("一致する予定が見つかりませんでした（タイトル＋日付）。")
     else:
         st.info("カレンダー上の予定をクリックするとここに表示されます。")
 
@@ -201,6 +203,7 @@ if clicked_date:
             events.append(new_event)
             save_events(events)
             st.success("保存しました！")
+            # rerun をフォームの外で安全に呼ぶ
             st.experimental_rerun()
 
 # -------------------------
@@ -211,4 +214,3 @@ if st.button("🗑 予定をすべて削除"):
         os.remove(DATA_FILE)
     st.success("全削除しました。")
     st.experimental_rerun()
-
