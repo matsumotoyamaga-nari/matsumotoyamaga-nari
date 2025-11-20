@@ -1,115 +1,231 @@
-import json
-import datetime
 import streamlit as st
-from streamlit_oauth import OAuth2Component
+from streamlit_calendar import calendar
+import datetime
+import json
+import os
+import uuid
+from datetime import datetime as dt
 
-# ========== Google OAuth 設定 ==========
-client_id = "あなたのGoogleClientID"
-client_secret = "あなたのGoogleClientSecret"
-redirect_uri = "http://localhost:8501"
+st.set_page_config(page_title="クリックで予定入力カレンダー", layout="wide")
+st.title("📅 クリックで予定を追加できるカレンダー")
 
-authorization_base_url = "https://accounts.google.com/o/oauth2/auth"
-token_url = "https://oauth2.googleapis.com/token"
+DATA_FILE = "events.json"
 
-oauth = OAuth2Component(
-    client_id,
-    client_secret,
-    authorization_base_url,
-    token_url,
-    redirect_uri,
-    {"scope": "openid email profile"},
-)
+# -------------------------
+# ヘルパ：読み込み & id付与
+# -------------------------
+def load_events_with_ids():
+    if not os.path.exists(DATA_FILE):
+        return []
+    with open(DATA_FILE, "r", encoding="utf-8") as f:
+        data = json.load(f)
 
-# ========== OAuth2ログイン ==========
-st.title("🔐 Googleログイン → カレンダーアプリ")
+    events = []
+    if isinstance(data, dict):
+        for k, v in data.items():
+            events.append({"title": v, "start": k, "end": k})
+    elif isinstance(data, list):
+        events = data
+    else:
+        return []
 
-if "token" not in st.session_state:
-    st.session_state.token = None
-
-if st.session_state.token is None:
-    result = oauth.authorize_button("Googleでログイン", key="google")
-    if result and "token" in result:
-        st.session_state.token = result["token"]
-
-if st.session_state.token is None:
-    st.stop()
-
-# ログイン成功
-st.success("ログインしました！")
-user_info = oauth.get_user_info(st.session_state.token)
-st.write(f"こんにちは、**{user_info.get('name')}** さん")
-
-# ========== 予定データを読み書きする関数 ==========
-EVENT_FILE = "events.json"
-
-def load_events():
-    try:
-        with open(EVENT_FILE, "r", encoding="utf-8") as f:
-            return json.load(f)
-    except:
-        return {}
+    changed = False
+    for ev in events:
+        if not isinstance(ev, dict):
+            continue
+        if "id" not in ev:
+            ev["id"] = str(uuid.uuid4())
+            changed = True
+    if changed:
+        save_events(events)
+    return events
 
 def save_events(events):
-    with open(EVENT_FILE, "w", encoding="utf-8") as f:
+    with open(DATA_FILE, "w", encoding="utf-8") as f:
         json.dump(events, f, ensure_ascii=False, indent=2)
 
-events = load_events()
+# -------------------------
+# ヘルパ：クリック情報取得
+# -------------------------
+def extract_clicked_info(clicked_raw):
+    if not clicked_raw:
+        return {}
+    if isinstance(clicked_raw, dict) and "event" in clicked_raw and isinstance(clicked_raw["event"], dict):
+        ev = clicked_raw["event"]
+    else:
+        ev = clicked_raw if isinstance(clicked_raw, dict) else {}
 
-# ========== カレンダー表示 ==========
-st.header("📅 カレンダーに予定を追加する")
+    info = {}
+    if "id" in ev:
+        info["id"] = ev.get("id")
+    info["title"] = ev.get("title") or ev.get("text") or ev.get("name")
 
-today = datetime.date.today()
-year = st.sidebar.selectbox("年", list(range(2020, 2031)), index=year := list(range(2020,2031)).index(today.year))
-month = st.sidebar.selectbox("月", list(range(1, 13)), index=today.month - 1)
-
-first_day = datetime.date(year, month, 1)
-start_weekday = first_day.weekday()
-days = (datetime.date(year + (month // 12), ((month % 12) + 1), 1) - datetime.timedelta(days=1)).day
-
-# 表形式でカレンダーを描画
-import calendar
-cal = calendar.Calendar(firstweekday=0)
-
-st.subheader(f"{year}年 {month}月")
-
-clicked_date = None
-
-# カレンダー描画
-for week in cal.monthdatescalendar(year, month):
-    cols = st.columns(7)
-    for i, day in enumerate(week):
-        label = str(day.day)
-        if day.month != month:
-            cols[i].write(" ")
-
+    raw_start = ev.get("start") or ev.get("startStr") or ev.get("date") or ev.get("dateStr")
+    if raw_start:
+        s = str(raw_start)
+        if "T" in s:
+            s = s.split("T")[0]
         else:
-            # ボタンで日付選択
-            if cols[i].button(label, key=f"{day}"):
-                clicked_date = day
+            try:
+                s = dt.fromisoformat(s).date().isoformat()
+            except Exception:
+                s = s[:10]
+        info["start"] = s
 
-            # 予定があれば表示
-            date_key = str(day)
-            if date_key in events:
-                cols[i].write(f"📝 {events[date_key]['title']}")
+    return info
 
-# ========== 日付をクリックしたら予定入力フォーム ==========
+# -------------------------
+# 初期ロード
+# -------------------------
+events = load_events_with_ids()
+
+# -------------------------
+# レイアウト
+# -------------------------
+col1, col2 = st.columns([3, 1])
+
+# -------------------------
+# 右パネル：年・月選択
+# -------------------------
+with col2:
+    st.subheader("🗓 年月選択")
+
+    today = datetime.date.today()
+    year_list = list(range(2020, 2031))
+    year_index = year_list.index(today.year)
+    year = st.selectbox("年", year_list, index=year_index)
+
+    month_list = list(range(1, 13))
+    month_index = month_list.index(today.month)
+    month = st.selectbox("月", month_list, index=month_index)
+
+# -------------------------
+# カレンダー設定
+# -------------------------
+calendar_options = {
+    "initialView": "dayGridMonth",
+    "editable": True,
+    "selectable": True,
+    "locale": "ja",
+    "initialDate": f"{year}-{month:02d}-01",  # 選択年月で初期表示
+    "headerToolbar": {
+        "left": "prev,next today",
+        "center": "title",
+        "right": "dayGridMonth,timeGridWeek",
+    },
+}
+
+# -------------------------
+# カレンダー表示
+# -------------------------
+with col1:
+    state = calendar(events=events, options=calendar_options, key="calendar")
+
+# -------------------------
+# クリック取得
+# -------------------------
+clicked_raw = None
+if state:
+    for key in ("eventClick", "clicked", "eventClickInfo", "clickedEvent"):
+        if key in state and state[key]:
+            clicked_raw = state[key]
+            break
+
+clicked_info = extract_clicked_info(clicked_raw)
+
+if clicked_info.get("id"):
+    st.session_state["selected_id"] = clicked_info["id"]
+    st.session_state["selected_title"] = clicked_info.get("title", "")
+    st.session_state["selected_start"] = clicked_info.get("start", "")
+else:
+    if clicked_info.get("title") and clicked_info.get("start"):
+        st.session_state["selected_id"] = None
+        st.session_state["selected_title"] = clicked_info["title"]
+        st.session_state["selected_start"] = clicked_info["start"]
+
+selected_id = st.session_state.get("selected_id", None)
+selected_title = st.session_state.get("selected_title", None)
+selected_start = st.session_state.get("selected_start", None)
+
+# -------------------------
+# 右パネル：削除
+# -------------------------
+with col2:
+    st.subheader("📝 選択中の予定")
+
+    if selected_title:
+        st.markdown(f"**タイトル：** {selected_title}")
+        st.markdown(f"**日付：** {selected_start or '（未取得）'}")
+
+        if st.button("❌ この予定を削除する"):
+            if selected_id:
+                new_events = [e for e in events if e.get("id") != selected_id]
+                save_events(new_events)
+                st.session_state.clear()
+                st.experimental_rerun()
+            else:
+                candidates = []
+                for idx, e in enumerate(events):
+                    ev_title = e.get("title", "")
+                    ev_start = e.get("start", "")
+                    s = str(ev_start)
+                    if "T" in s:
+                        s = s.split("T")[0]
+                    else:
+                        try:
+                            s = dt.fromisoformat(s).date().isoformat()
+                        except Exception:
+                            s = s[:10]
+                    if ev_title == selected_title and s == selected_start:
+                        candidates.append(idx)
+
+                if len(candidates) == 1:
+                    del events[candidates[0]]
+                    save_events(events)
+                    st.session_state.clear()
+                    st.experimental_rerun()
+                else:
+                    st.warning("一致する予定が見つかりませんでした（タイトル＋日付）。")
+    else:
+        st.info("カレンダー上の予定をクリックするとここに表示されます。")
+
+# -------------------------
+# 日付クリックで追加（時間入力なし）
+# -------------------------
+clicked_date = None
+if state and "dateClick" in state and state["dateClick"]:
+    dc = state["dateClick"]
+    clicked_date = dc.get("date") or dc.get("start") or dc.get("startStr")
+elif state and "select" in state and state["select"]:
+    sel = state["select"]
+    clicked_date = sel.get("start") or sel.get("startStr")
+
 if clicked_date:
-    st.subheader(f"📌 {clicked_date} の予定を入力")
-    title = st.text_input("予定タイトル")
-    memo = st.text_area("メモ")
+    cd = str(clicked_date)
+    normalized_clicked = cd.split("T")[0]
 
-    if st.button("保存"):
-        events[str(clicked_date)] = {
-            "title": title,
-            "memo": memo
-        }
-        save_events(events)
-        st.success("保存しました！")
-        st.experimental_rerun()
+    st.info(f"🗓 {normalized_clicked} の予定を追加します。")
+    with st.form("add_event"):
+        title = st.text_input("予定を入力してください")
+        submitted = st.form_submit_button("保存")
 
-# ========== 保存された予定一覧 ==========
-st.subheader("🗂 登録済みの予定一覧")
+        if submitted and title:
+            new_event = {
+                "id": str(uuid.uuid4()),
+                "title": title,
+                "start": normalized_clicked,
+                "end": normalized_clicked,
+            }
+            events.append(new_event)
+            save_events(events)
+            st.success("保存しました！")
+            st.experimental_rerun()
 
-for date_str, info in sorted(events.items()):
-    st.write(f"**{date_str}**：{info['title']}")
-    st.caption(info["memo"])
+# -------------------------
+# 全削除
+# -------------------------
+if st.button("🗑 予定をすべて削除"):
+    if os.path.exists(DATA_FILE):
+        os.remove(DATA_FILE)
+    st.success("全削除しました。")
+    st.experimental_rerun()
