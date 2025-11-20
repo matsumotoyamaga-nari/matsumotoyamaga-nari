@@ -5,14 +5,13 @@ import json
 import os
 import uuid
 from datetime import datetime as dt
-import pytz  # 追加
+import pytz
 
 st.set_page_config(page_title="クリックで予定入力カレンダー", layout="wide")
 st.title("📅 サッカー部予定カレンダー")
 
 DATA_FILE = "events.json"
-
-JST = pytz.timezone("Asia/Tokyo")  # タイムゾーン設定
+JST = pytz.timezone("Asia/Tokyo")  # 東京タイムゾーン
 
 # -------------------------
 # ヘルパ：読み込み & id付与
@@ -66,13 +65,11 @@ def extract_clicked_info(clicked_raw):
     raw_start = ev.get("start") or ev.get("startStr") or ev.get("date") or ev.get("dateStr")
     if raw_start:
         try:
-            # ISO形式でdatetimeに変換
             dt_obj = dt.fromisoformat(str(raw_start))
-            # UTC→JST変換
             dt_obj = dt_obj.astimezone(JST)
             s = dt_obj.strftime("%Y-%m-%d %H:%M")
         except Exception:
-            s = str(raw_start)[:16]  # 最初の16文字（YYYY-MM-DD HH:MM）
+            s = str(raw_start)[:16]
         info["start"] = s
 
     return info
@@ -143,7 +140,8 @@ with col2:
         st.markdown(f"**タイトル：** {selected_title}")
         st.markdown(f"**日付：** {selected_start or '（未取得）'}")
 
-        if st.button("❌ この予定を削除する"):
+        delete_pressed = st.button("❌ この予定を削除する")
+        if delete_pressed:
             deleted = False
             if selected_id:
                 events = [e for e in events if e.get("id") != selected_id]
@@ -155,7 +153,6 @@ with col2:
                     ev_start = e.get("start", "")
                     if ev_title == selected_title and ev_start == selected_start:
                         candidates.append(idx)
-
                 if len(candidates) == 1:
                     del events[candidates[0]]
                     deleted = True
@@ -163,6 +160,7 @@ with col2:
             if deleted:
                 save_events(events)
                 st.session_state.clear()
+                # ボタン処理完了後に rerun
                 st.experimental_rerun()
             else:
                 st.warning("一致する予定が見つかりませんでした（タイトル＋日付）。")
@@ -170,7 +168,7 @@ with col2:
         st.info("カレンダー上の予定をクリックするとここに表示されます。")
 
 # -------------------------
-# 日付クリックで追加（JSTに変換）
+# 日付クリックで追加（JST）
 # -------------------------
 clicked_date = None
 if state and "dateClick" in state and state["dateClick"]:
@@ -192,22 +190,25 @@ if clicked_date:
     with st.form("add_event"):
         title = st.text_input("予定を入力してください")
         submitted = st.form_submit_button("保存")
-        if submitted and title:
-            new_event = {
-                "id": str(uuid.uuid4()),
-                "title": title,
-                "start": normalized_clicked,
-                "end": normalized_clicked,
-            }
-            events.append(new_event)
-            save_events(events)
-            st.success("保存しました！")
-            st.experimental_rerun()
+
+    # フォーム処理完了後に rerun
+    if submitted and title:
+        new_event = {
+            "id": str(uuid.uuid4()),
+            "title": title,
+            "start": normalized_clicked,
+            "end": normalized_clicked,
+        }
+        events.append(new_event)
+        save_events(events)
+        st.success("保存しました！")
+        st.experimental_rerun()
 
 # -------------------------
 # 全削除
 # -------------------------
-if st.button("🗑 予定をすべて削除"):
+delete_all_pressed = st.button("🗑 予定をすべて削除")
+if delete_all_pressed:
     if os.path.exists(DATA_FILE):
         os.remove(DATA_FILE)
     st.success("全削除しました。")
