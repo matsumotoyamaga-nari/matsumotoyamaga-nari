@@ -14,6 +14,16 @@ DATA_FILE = "events.json"
 JST = pytz.timezone("Asia/Tokyo")  # 東京タイムゾーン
 
 # -------------------------
+# rerunフラグの初期化
+# -------------------------
+if "needs_rerun" not in st.session_state:
+    st.session_state["needs_rerun"] = False
+
+if st.session_state["needs_rerun"]:
+    st.session_state["needs_rerun"] = False
+    st.experimental_rerun()
+
+# -------------------------
 # ヘルパ：読み込み & id付与
 # -------------------------
 def load_events_with_ids():
@@ -147,12 +157,10 @@ with col2:
                 events = [e for e in events if e.get("id") != selected_id]
                 deleted = True
             else:
-                candidates = []
-                for idx, e in enumerate(events):
-                    ev_title = e.get("title", "")
-                    ev_start = e.get("start", "")
-                    if ev_title == selected_title and ev_start == selected_start:
-                        candidates.append(idx)
+                candidates = [
+                    idx for idx, e in enumerate(events)
+                    if e.get("title","") == selected_title and e.get("start","") == selected_start
+                ]
                 if len(candidates) == 1:
                     del events[candidates[0]]
                     deleted = True
@@ -160,8 +168,7 @@ with col2:
             if deleted:
                 save_events(events)
                 st.session_state.clear()
-                # ボタン処理完了後に rerun
-                st.experimental_rerun()
+                st.session_state["needs_rerun"] = True
             else:
                 st.warning("一致する予定が見つかりませんでした（タイトル＋日付）。")
     else:
@@ -191,7 +198,6 @@ if clicked_date:
         title = st.text_input("予定を入力してください")
         submitted = st.form_submit_button("保存")
 
-    # フォーム処理完了後に rerun
     if submitted and title:
         new_event = {
             "id": str(uuid.uuid4()),
@@ -202,7 +208,7 @@ if clicked_date:
         events.append(new_event)
         save_events(events)
         st.success("保存しました！")
-        st.experimental_rerun()
+        st.session_state["needs_rerun"] = True
 
 # -------------------------
 # 全削除
@@ -212,4 +218,4 @@ if delete_all_pressed:
     if os.path.exists(DATA_FILE):
         os.remove(DATA_FILE)
     st.success("全削除しました。")
-    st.experimental_rerun()
+    st.session_state["needs_rerun"] = True
